@@ -1,0 +1,12 @@
+9f77c8b3997b0ce2c3a76cecc23720da *DESCRIPTION
+2dc1659fbb994698435e2dd5f5512a01 *NAMESPACE
+a29a14d154a807688b620e8a64f58458 *R/auxiliary_functions.R
+0a464afb66b18fec9977a6566980ddbc *R/ecolRxC.R
+8476fb5038b5cc97db39c9ca93bc5245 *R/plot.R
+b013aaa6572959e6722da83cb9b2fd44 *R/print.R
+841ab4c0259a78084ee159fa525e83cf *R/summary.R
+65fd9446d34b19d772c7a3db013f4590 *man/ecolRxC.Rd
+73a9ce9a26b2228f0404f7b577e5ea3e *man/plot.ecolRxC.Rd
+9a321bd1ad31849a68a5fe655ab70334 *man/print.ecolRxC.Rd
+6b48d4f6ccf35dddf70a50a8ed7c55b4 *man/print.summary.ecolRxC.Rd
+2090626017409449bbb46ba32120eb35 *man/summary.ecolRxC.Rd
