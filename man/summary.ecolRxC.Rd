@@ -2,7 +2,7 @@
 % Please edit documentation in R/summary.R
 \name{summary.ecolRxC}
 \alias{summary.ecolRxC}
-\title{Summarize a ecolRxC output object}
+\title{Summarize an ecolRxC output object}
 \usage{
 \method{summary}{ecolRxC}(object, ...)
 }

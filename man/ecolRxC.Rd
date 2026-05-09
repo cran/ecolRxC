@@ -10,12 +10,14 @@ ecolRxC(
   scale = "probit",
   method = "Thomsen",
   local = TRUE,
-  census.changes = c("adjust", "raw", "regular", "ordinary", "enriched",
-    "simultaneous", "semifull", "full", "gold"),
+  census.changes = c("adjust", "raw", "regular", "ordinary", "enriched", "simultaneous",
+    "semifull", "full", "gold"),
   reference = NULL,
+  regions = NULL,
   confidence = NULL,
-  B = 500,
+  B = 0,
   Yule.aprox = FALSE,
+  ref.combination = "LRCNV",
   tol = 1e-06,
   ...
 )
@@ -49,9 +51,9 @@ in \code{votes.election1} and \code{votes.election2} regarding new entries
 and exits of the election censuses between the two elections or
 indicating how their sum discrepancies should be handled.
 This argument allows the eight options discussed in Pavia (2022)
-as well as an adjusting option. This argument admits nine values: \code{adjust},
-\code{raw}, \code{regular}, \code{ordinary}, \code{simultaneous}, \code{enriched}, \code{semifull},
-\code{full} and \code{gold}. See \strong{Details}. Default, \code{adjust}.}
+as well as an adjusting option. This argument admits nine values: \code{"adjust"},
+\code{"raw"}, \code{"regular"}, \code{"ordinary"}, \code{"simultaneous"}, \code{"enriched"}, \code{"semifull"},
+\code{"full"} and \code{"gold"}. See \strong{Details}. Default, \code{"adjust"}.}
 
 \item{reference}{A vector of two components indicating (parties) options in election 1
 and 2, respectively, to be used as reference with \code{method = "Thomsen"}. This has not effect
@@ -60,20 +62,40 @@ If \code{reference = NULL}, the final solution is constructed as a weighted aver
 of all the congruent solutions attained after considering as references all
 combinations of options. Default \code{NULL}.}
 
+\item{regions}{Optional argument used to partition the set of units into subsets. It must be a vector
+of length equal to the number of units, indicating the subset (region) to which each
+unit belongs. When provided, the selected ecolRxC specification is then applied independently
+within each subset and the joint estimates are obtained by properly combining/aggregating the
+different region estimates. By default \code{NULL}, no partition.}
+
 \item{confidence}{A number between 0 and 1 to be used as level of confidence for the
 confidence intervals of the transition rates. By default \code{NULL}.
 If \code{confidence = NULL}, confidence intervals are not computed.}
 
-\item{B}{An integer indicating the number of samples to be drawn from each crude estimated
-confidence interval for estimating final confidence intervals when either
-R (J) or C (K) is higher than two. This is not relevant for the 2x2 case.
-It can take a while to compute confidence intervals, mainly when \code{method = Thomsen}.
-In general computation burden grows with \code{B}. Default, \code{500}.}
+\item{B}{Either a non-positive number or a positive integer number. When \code{B} is non-positive,
+confidence intervals are computed in a similar way than in Pavia-Miralles (2005),
+\url{https://www.jstor.org/stable/27590658}, with the methodology adapted to this problem.
+When \code{B} is a positive integer number, it represents the number of samples to
+be drawn from each crude estimated confidence interval for estimating final
+confidence intervals when either R (J) or C (K) is higher than two.
+This argument is not relevant for the 2x2 case.
+It can take a while to compute confidence intervals, mainly when \code{method = Thomsen}
+and \code{B} is a large positive integer; in general computation burden grows as
+a function of \code{B}, the number of units and the dimension of the transition table.
+Default, \code{0}.}
 
 \item{Yule.aprox}{\code{TRUE}/\code{FALSE} argument indicating if either Thomsen (1987)'s formula (3.44),
 based on a binormal, or Thomsen (1987)'s formula (3.46), based on Yule's
 approximation of tetrachoric correlation, should be use to estimate
 cross-proportions. Default \code{FALSE}, formula (3.44).}
+
+\item{ref.combination}{A character string specifying how unit table estimates should be
+combined to generate the default solution when \code{method = "Thomsen"} is used
+and the estimates are obtained using all cells as reference.
+This argument allows for the eight options discussed in Pavia and Thomsen (2025):
+\code{"Mean"}, \code{"RCNV"}, \code{"SQRCNV"}, \code{"SQRM"}, \code{"AVCR"}, \code{"LRCNV"}, \code{"LSQRCNV"},
+and \code{"LSQRM"}; \doi{10.1017/psrm.2024.57}. The default is \code{"LRCNV"}.
+The eight solutions are included in the component \code{vjk.averages} of \code{reference.outputs}.}
 
 \item{tol}{A number indicating the level of precision to be used to stop the
 adjustment of initial/crude count estimates reached using a 2x2 approach in a
@@ -109,7 +131,7 @@ In \code{raw}, \code{regular}, \code{ordinary} and \code{enriched} scenarios, th
 and net exits (when they are present). When \code{confidence = NULL} this is a \code{NULL} object.}
 \item{VTM.crude.global}{ A matrix of order JxK (RxC) with the  (inconsistent) crude estimated proportions for the row-standardized
 vote transitions from election 1 to election 2 in the whole space attained in a 2x2 fashion before making them
-consistent using the iterative proportional fitting algorithm or the Thomsen iteratuve algortihm.
+consistent using the iterative proportional fitting algorithm or the Thomsen iterative algorithm.
 In \code{raw}, \code{regular}, \code{ordinary} and \code{enriched} scenarios, this matrix includes the row and the
 column corresponding to net entries and net exits (when they are present).}
 \item{VTM.units}{ An array of order JxKxI (RxCxI) with the estimated proportions of the row-standardized vote transitions from election 1 to election 2
@@ -134,21 +156,24 @@ and net exits (when they are present).}
 attained for each unit in a 2x2 fashion before making them consistent using the iterative proportional fitting algorithm or the Thomsen iterative algorithm.
 When \code{local = FALSE}, this is a NULL object. In \code{raw}, \code{regular}, \code{ordinary} and \code{enriched} scenarios, each unit matrix includes the row and the column
 corresponding to net entries and net exits (when they are present).}
-\item{correlations}{ A matrix of order JxK (Rxc) with the across units correlations between options for the proportions
+\item{correlations}{ A matrix of order JxK (RxC) with the across units correlations between options for the proportions
 in the transformed scale.}
-\item{reference.outputs}{ A list with three components: \code{vjk.averages}, \code{vjk.by.reference} and \code{vjk.units.by.reference}.
-The first component \code{vjk.averages} is a JxKx8 array with eight different global solutions
-of transfer matrix of votes attained after combining with different weights each of the
-solutions obtained using the different combinations of a row and a column option as reference.
-The second component \code{vjk.by.reference} is a JxKx(J1·K1) array with the J1K1 different
-global solutions of transfer matrix of votes attained after choosing as reference all the
-possible combination of a row and a column option. The third component \code{vjk.units.by.reference}
-is a JxKxIx(J1·K1) array with the local solutions linked to \code{vjk.by.reference}.
-When either \code{method = "IPF"} or \code{reference} is not \code{NULL}, this is a \code{NULL} object.}
+\item{reference.outputs}{A list with four components: \code{vjk.averages}, \code{vjk.units.averages}, \code{vjk.by.reference},
+and \code{vjk.units.by.reference}.  The component \code{vjk.averages} is a JxKx8 array containing
+eight global solutions  for the vote transfer matrix, obtained by combining (with different
+weights) the solutions derived from all combinations of row and column reference options.
+The component \code{vjk.units.averages} is a JxKxIx8 array containing the corresponding
+unit-level solutions. The component \code{vjk.by.reference} is a JxKx(J1\code{*}K1) array containing
+all global solutions obtained by considering every possible combination of row and column
+reference options. The component \code{vjk.units.by.reference} is a JxKxIx(J1\code{*}K1) array containing the
+unit-level solutions associated with \code{vjk.by.reference}.
+If either \code{method = "IPF"} or \code{reference} is not \code{NULL}, this component is \code{NULL}.}
 
-\item{iter}{ A vector of either length 1 (when \code{reference} is different of \code{NULL}) or J1·K1 with
-the number of iterations needed by the Thomsen algorithm to reach convergence for
-each reference pair. When \code{method = "Thomsen"} this is a \code{NULL} object.}
+\item{deterministic.bounds}{ A list of two matrices of order JxK (RxC) and two arrays of order JxKxI (RXCxI) containing
+for each vote transition the lower and upper allowed proportions given the observed aggregates.}
+
+\item{regions.outputs}{ If \code{regions = NULL}, this is \code{NULL}. Otherwise, it is a list of ecolRxC outputs,
+with one element per subset defined by \code{regions}.}
 
 \item{inputs}{ A list containing all the objects with the values used as arguments by the function.}
 }
@@ -157,14 +182,14 @@ Estimates JxK (RxC) vote transfer matrices (ecological contingency tables) based
 }
 \details{
 Description of the \code{census.changes} argument in more detail.
-\itemize{
-\item{\code{adjust}: }{The default value. This is the simplest solution for handling discrepancies
+\describe{
+\item{\code{adjust}:}{ The default value. This is the simplest solution for handling discrepancies
 between the total number of counts for the first and second elections.
 With this value the J1 column-aggregations of the counts
 in \code{votes.election1} of the first election are proportionally adjusted to
 equal the aggregation of the counts in \code{votes.election2} of the second election.
 In this scenario, J is equal to J1 and K equal to K2.}
-\item{\code{raw}: }{This argument accounts for a scenario with two elections elapsed at least
+\item{\code{raw}:}{ This argument accounts for a scenario with two elections elapsed at least
 some months where only the raw election data recorded in the I (territorial) units,
 in which the electoral space under study is divided, are available and net
 entries and net exits are approached from the available information.
@@ -173,24 +198,24 @@ Pavia (2022). When both net entries and exits are no
 null, constraint (15) of Pavia (2022) applies: no transfer between entries and
 exits are allowed. In this scenario, J could be equal to J1 or J1 + 1 and K equal to
 K2 or K2 + 1.}
-\item{\code{simultaneous}: }{This is the value to be used in classical ecological inference problems,
+\item{\code{simultaneous}:}{ This is the value to be used in classical ecological inference problems,
 such as in ecological studies of social or racial voting, and in scenarios with two simultaneous elections.
 In this scenario, the sum by rows of \code{votes.election1} and \code{votes.election2} must coincide.}
-\item{\code{regular}: }{This value accounts for a scenario with
+\item{\code{regular}:}{ This value accounts for a scenario with
 two elections elapsed at least some months where (i) the column J1
 of \code{votes.election1} corresponds to new (young) electors who have the right
 to vote for the first time, (ii) net exits and maybe other additional
 net entries are computed according to Pavia (2022). When both net entries and exits
 are no null, constraints (13) and (15) of Pavia (2022) apply. In this scenario, J
 could be equal to J1 or J1 + 1 and K equal to K2 or K2 + 1.}
-\item{\code{ordinary}: }{This value accounts for a scenario
+\item{\code{ordinary}:}{ This value accounts for a scenario
 with two elections elapsed at least some months where (i) the column K1
 of \code{votes.election2} corresponds to electors who died in the interperiod
 election, (ii) net entries and maybe other additional net exits are
 computed according to Pavia (2022). When both net entries and net exits are no null,
 constraints (14) and (15) of Pavia (2022) apply.
 In this scenario, J could be equal to J1 or J1 + 1 and K equal to K2 or K2 + 1.}
-\item{\code{enriched}: }{This value accounts for a scenario that somewhat combine \code{regular} and
+\item{\code{enriched}:}{ This value accounts for a scenario that somewhat combine \code{regular} and
 \code{ordinary} scenarios. We consider two elections elapsed at least some months where
 (i) the column J1 of \code{votes.election1} corresponds to new (young) electors
 who have the right to vote for the first time, (ii) the column K2 of
@@ -199,14 +224,14 @@ election, (iii) other (net) entries and (net) exits are computed according
 to Pavia (2022). When both net entries and net exits are no null, constraints (12) to
 (15) of Pavia (2022) apply. In this scenario, J could be equal
 to J1 or J1 + 1 and K equal to K2 or K2 + 1.}
-\item{\code{semifull}: }{This value accounts for a scenario with two elections elapsed at least some
+\item{\code{semifull}:}{ This value accounts for a scenario with two elections elapsed at least some
 months, where: (i) the column J1 = J of \code{votes.election1} totals new
 electors (young and immigrants) that have the right to vote for the first time in each polling unit and
 (ii) the column K2 = K of \code{votes.election2} corresponds to total exits of the census
 lists (due to death or emigration). In this scenario, the sum by rows of
 \code{votes.election1} and \code{votes.election2} must agree and constraint (15)
 of Pavia (2022) apply.}
-\item{\code{full}: }{This value accounts for a scenario with two elections elapsed at least some
+\item{\code{full}:}{ This value accounts for a scenario with two elections elapsed at least some
 months, where J = J1, K = K2 and (i) the column J - 1 of \code{votes.election1} totals new (young)
 electors that have the right to vote for the first time, (ii) the column J
 of \code{votes.election1} measures new immigrants that have the right to vote and
@@ -214,9 +239,12 @@ of \code{votes.election1} measures new immigrants that have the right to vote an
 lists (due to death or emigration). In this scenario, the sum by rows of
 \code{votes.election1} and \code{votes.election2} must agree and constraints (13)
 and (15) of Pavia (2022) apply.}
-\item{\code{gold}: }{This value accounts for a scenario similar to \code{full}, where J = J1, K = K2 and
-total exits are separated out between exits due to emigration
-(column K - 1 of \code{votes.election2}) and death (column K of \code{votes.election2}).
+\item{\code{gold}:}{ This value accounts for a scenario similar to \code{full}, where J = J1, K = K2
+where (i) the column J - 1 of \code{votes_election1} totals new young
+electors that have the right to vote for the first time, (ii) the column J
+of \code{votes_election1} measures new immigrants that have the right to vote,
+and total exits are separated out between (iii) exits due to emigration
+(column K - 1 of \code{votes.election2}) and (iv) deaths (column K of \code{votes.election2}).
 In this scenario, the sum by rows of \code{votes.election1} and \code{votes.election2} must agree.
 Constraints (12) to (15) of Pavia (2022) apply.}
 }
@@ -247,7 +275,9 @@ Achen, C.H. (2000). The Thomsen Estimator for Ecological Inference (Unpublished 
 
 Park, W.-H. (2008). Ecological Inference and Aggregate Analysis of Elections. PhD Dissertation. University of Michigan.
 
-Pavia, J.M. (2022). Adjustment of initial estimates of voter transition probabilities to guarantee consistency and completeness.
+Pavía, J.M. (2023). Adjustment of initial estimates of voter transition probabilities to guarantee consistency and completeness. \emph{SN Social Sciences}, 3, 75. \doi{10.1007/s43545-023-00658-y}.
+
+Pavía, J.M. and Thomsen, S.R. (2025). ecolRxC: Ecological inference estimation of RxC tables using latent structure approaches. \emph{Political Science Research and Methods}, 13(4), 943-961. \doi{10.1017/psrm.2024.57}.
 
 Thomsen, S.R. (1987). Danish Elections 1920-79: a Logit Approach to Ecological Analysis and Inference. Politica, Aarhus, Denmark.
 }

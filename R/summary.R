@@ -1,4 +1,4 @@
-#' 	Summarize a ecolRxC output object
+#' 	Summarize an ecolRxC output object
 #'
 #' @description Summary method for objects obtained with the ecolRxC function
 #'

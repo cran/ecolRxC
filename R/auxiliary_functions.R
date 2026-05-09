@@ -45,7 +45,7 @@ Thomsen_logit_2x2 <- function(votes1, total1, votes2, total2, confidence = 0.95,
   r <- sum(weight * (lv1 - meanlv1) * (lv2 - meanlv2))/sqrt(varlv1*varlv2)
 
 # Integration binormal
-  core <- pnorm2d(stats::qnorm(t1), stats::qnorm(t2), rho = r)
+  core <- pnorm2d_mvtnorm(stats::qnorm(t1), stats::qnorm(t2), rho = r)
   if (Yule.aprox){
     # Tetrachoric formula
     k <- sqrt((1L + 2L*r*t1 + 2L*r*t2 - r)^2L - 8L*r*(1L + r)*t1*t2)
@@ -66,8 +66,8 @@ Thomsen_logit_2x2 <- function(votes1, total1, votes2, total2, confidence = 0.95,
     r_hi <- tanh(log((1L + r)/(1L - r))/2L + z/sqrt(I - 3L))
     r_low <- tanh(log((1L + r)/(1L - r))/2L - z/sqrt(I - 3L))
 
-    p2p_hi <- as.numeric(pnorm2d(stats::qnorm(t1), stats::qnorm(t2), rho = r_hi))/t1
-    p2p_low <- as.numeric(pnorm2d(stats::qnorm(t1), stats::qnorm(t2), rho = r_low))/t1
+    p2p_hi <- as.numeric(pnorm2d_mvtnorm(stats::qnorm(t1), stats::qnorm(t2), rho = r_hi))/t1
+    p2p_low <- as.numeric(pnorm2d_mvtnorm(stats::qnorm(t1), stats::qnorm(t2), rho = r_low))/t1
     if (Yule.aprox){
       # Tetrachoric formula
       k <- sqrt((1L + 2L*r_hi*t1 + 2L*r_hi*t2 - r_hi)^2L - 8L*r_hi*(1L + r_hi)*t1*t2)
@@ -85,6 +85,21 @@ Thomsen_logit_2x2 <- function(votes1, total1, votes2, total2, confidence = 0.95,
   output <- list("PTM" = trans.matrix, "PTM_low" = trans.matrix_low,
                  "PTM_high" = trans.matrix_high, "cor" = r)
   return(output)
+}
+
+#~~ALTERNATIVE FUNCTION FOR CUMULATIVE BIVARIATE NORMAL~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+pnorm2d_mvtnorm <- function(x, y = x, rho = 0) {
+  sigma <- matrix(c(1, rho, rho, 1), 2, 2)
+  
+  vapply(seq_along(x), function(i) {
+    mvtnorm::pmvnorm(
+      lower = c(-Inf, -Inf),
+      upper = c(x[i], y[i]),
+      sigma = sigma,
+      algorithm = mvtnorm::GenzBretz()
+    )[1]
+  }, numeric(1))
 }
 
 #~~FUNCTIONS FOR CUMULATIVE BIVARIATE NORMAL~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -295,7 +310,7 @@ Thomsen_probit_2x2 <- function(votes1, total1, votes2, total2, confidence = 0.95
   r <- sum(weight * (pv1 - meanpv1) * (pv2 - meanpv2))/sqrt(varpv1*varpv2)
 
   # Integration binormal
-  core <- pnorm2d(stats::qnorm(t1), stats::qnorm(t2), rho = r)
+  core <- pnorm2d_mvtnorm(stats::qnorm(t1), stats::qnorm(t2), rho = r)
   if (Yule.aprox){
     # Tetrachoric formula
     k <- sqrt((1L + 2L*r*t1 + 2L*r*t2 - r)^2L - 8L*r*(1L + r)*t1*t2)
@@ -316,8 +331,8 @@ Thomsen_probit_2x2 <- function(votes1, total1, votes2, total2, confidence = 0.95
     r_hi <- tanh(log((1L + r)/(1L - r))/2L + z/sqrt(I - 3L))
     r_low <- tanh(log((1L + r)/(1L - r))/2L - z/sqrt(I - 3L))
 
-    p2p_hi <- as.numeric(pnorm2d(stats::qnorm(t1), stats::qnorm(t2), rho = r_hi))/t1
-    p2p_low <- as.numeric(pnorm2d(stats::qnorm(t1), stats::qnorm(t2), rho = r_low))/t1
+    p2p_hi <- as.numeric(pnorm2d_mvtnorm(stats::qnorm(t1), stats::qnorm(t2), rho = r_hi))/t1
+    p2p_low <- as.numeric(pnorm2d_mvtnorm(stats::qnorm(t1), stats::qnorm(t2), rho = r_low))/t1
     if (Yule.aprox){
       # Tetrachoric formula
       k <- sqrt((1L + 2L*r_hi*t1 + 2L*r_hi*t2 - r_hi)^2L - 8L*r_hi*(1L + r_hi)*t1*t2)
@@ -339,8 +354,12 @@ Thomsen_probit_2x2 <- function(votes1, total1, votes2, total2, confidence = 0.95
 
 
 #-------------------------------------------------------------------------------
+IPF <- function(matriz, vector_columna, vector_fila, precision = 1e-6) {
+  IPF_cpp(matriz, vector_columna, vector_fila, precision)
+}
+
 # Funcion de ajuste por balanceo
-IPF <- function(matriz, vector.columna, vector.fila, precision = 0.000001){
+IPF_enR <- function(matriz, vector.columna, vector.fila, precision = 0.000001){
   #
   # IPF(matriz, vector.columna, vector.fila, precision = 0.000001)
   #
@@ -416,7 +435,12 @@ IPF <- function(matriz, vector.columna, vector.fila, precision = 0.000001){
 
 #-------------------------------------------------------------------------------
 # Funcion de ajuste por balanceo 2
-IPF2 <- function(matriz, vector.columna, vector.fila, precision = 0.01){
+
+IPF2 <- function(matriz, vector_columna, vector_fila, precision = 0.01) {
+  IPF2_cpp(matriz, vector_columna, vector_fila, precision)
+}
+
+IPF2_enR <- function(matriz, vector.columna, vector.fila, precision = 0.01){
 
   nc <- length(vector.columna)
   nf <- length(vector.fila)
@@ -484,10 +508,24 @@ tests_inputs_ecolRxC <- function(argg){
   if (!(argg$scale[1L] %in% c("logit", "probit")))
     stop('The value set for argument "scale" is not allowed. The only allowed strings for "scale" are "logit" and "probit".')
 
+  # Test names 3
+  if (!(argg$ref.combination[1L] %in% c("Mean", "RCNV", "SQRCNV", "SQRM", "AVCR", "LRCNV", "LSQRCNV",
+                                        "LSQRM")))
+    stop('The value set for argument "ref.combination" is not allowed. The only allowed strings for "ref.combination" are "Mean", "RCNV", "SQRCNV", "SQRM", "AVCR", "LRCNV", "LSQRCNV", and "LSQRM".')
+  
   # Test method
   if (!(argg$method[1L] %in% c("Thomsen", "IPF")))
     stop('The value set for argument "method" is not allowed. The only allowed strings for "method" are "Thomsen" and "IPF".')
 
+  # Test regions
+  if(!is.null(argg$regions)){
+    if(length(argg$regions) != nrow(argg.1))
+      stop('The length of vector "regions" must equal the number of units.')
+    if(min(table(argg$regions)) < 2L)
+      stop('The vector "regions" is not adequate, subsets with only a unit are not allowed.')
+    if(sum(is.na(argg$regions)) > 0)
+      stop('NAs are not allowed in the vector "regions".')
+  }
 
   # Test logical
   if (!is.logical(argg$local))
@@ -519,10 +557,12 @@ tests_inputs_ecolRxC <- function(argg){
   }
 
   # Test B
-  dif <- argg$B - round(argg$B)
-  if(dif != 0L | argg$B < 0L)
-      stop('Only positive integer values are allowed for the "B" argument.')
-
+  if (argg$B > 0L){
+    dif <- argg$B - round(argg$B)
+    if(dif != 0L)
+        stop('Only non-positive numbers or positive integer values are allowed for the "B" argument.')
+  }
+  
   # Test tol
   if(argg$tol < 0L)
   stop('Only positive values are allowed for the "tol" argument.')
@@ -705,18 +745,71 @@ interval_transitions <- function(muestra, vector.fila, vector.columna, tol, conf
 }
 #-------------------------------------------------------------------------------
 
-# Function for estimating the confidence intervals of the adjusted transfers votes
-interval_transfers <- function(muestra, vector.fila, vector.columna, tol, confidence){
-  B <- dim(muestra)[3]
-  for (b in 1L:B){
-    TM <- IPF(muestra[, , b], vector.columna, vector.fila, precision = tol)
+# Function for estimating the confidence intervals of the adjusted transitions probabilities
+# inspired by the conservative approach suggested for election night forecasting in 
+# Pavía-Miralles (2005)
+interval_transitions_conservative <- function(TM.low.c, TM.upp.c, vector.fila, 
+                                              vector.columna, tol){
+  tam <- dim(TM.low.c)
+  TM.low <- TM.upp <- TM.low.c
+  for (jj in 1L:tam[1L]){
+    for (kk in 1L:tam[2L]){
+      TM.l <- TM.upp.c
+      TM.u <- TM.low.c
+      TM.l[jj, kk] <- TM.low.c[jj, kk]
+      TM.u[jj, kk] <- TM.upp.c[jj, kk]
+      TM.l <- IPF(TM.l, vector.columna, vector.fila, precision = tol)
+      TM.u <- IPF(TM.u, vector.columna, vector.fila, precision = tol)
+      TM.low[jj, kk] <- TM.l[jj, kk]/sum(TM.l[jj, ])
+      TM.upp[jj, kk] <- TM.u[jj, kk]/sum(TM.u[jj, ])
+    }
   }
-  TM.upp <- apply(TM, c(1L, 2L), stats::quantile, probs = 1L - (1L - confidence)/2L)
-  TM.low <- apply(TM, c(1L ,2L), stats::quantile, probs = (1L - confidence)/2L)
+  TM.low <- pmin(TM.low, TM.upp)
+  TM.upp <- pmax(TM.low, TM.upp)
   output <- list("TM.low" = TM.low, "TM.upp" = TM.upp)
   return(output)
 }
 #-------------------------------------------------------------------------------
+
+# Function for estimating the confidence intervals of the adjusted transfers votes
+interval_transfers <- function(muestra, vector.fila, vector.columna, tol, confidence){
+  B <- dim(muestra)[3]
+  for (b in 1L:B){
+    muestra[, , b] <- IPF(muestra[, , b], vector.columna, vector.fila, precision = tol)
+  }
+  TM.upp <- apply(muestra, c(1L, 2L), stats::quantile, probs = 1L - (1L - confidence)/2L)
+  TM.low <- apply(muestra, c(1L ,2L), stats::quantile, probs = (1L - confidence)/2L)
+  output <- list("TM.low" = TM.low, "TM.upp" = TM.upp)
+  return(output)
+}
+#-------------------------------------------------------------------------------
+
+# Function for estimating the confidence intervals of the adjusted transfers votes
+# inspired by the conservative approach suggested for election night forecasting in 
+# Pavía-Miralles (2005)
+interval_transfers_conservative <- function(TM.low.c, TM.upp.c, vector.fila, 
+                                            vector.columna, tol){
+  tam <- dim(TM.low.c)
+  TM.low <- TM.upp <- TM.low.c
+  for (jj in 1L:tam[1L]){
+    for (kk in 1L:tam[2L]){
+      TM.l <- TM.upp.c
+      TM.u <- TM.low.c
+      TM.l[jj, kk] <- TM.low.c[jj, kk]
+      TM.u[jj, kk] <- TM.upp.c[jj, kk]
+      TM.l <- IPF(TM.l, vector.columna, vector.fila, precision = tol)
+      TM.u <- IPF(TM.u, vector.columna, vector.fila, precision = tol)
+      TM.low[jj, kk] <- TM.l[jj, kk]
+      TM.upp[jj, kk] <- TM.u[jj, kk]
+    }
+  }
+  TM.low <- pmin(TM.low, TM.upp)
+  TM.upp <- pmax(TM.low, TM.upp)
+  output <- list("TM.low" = TM.low, "TM.upp" = TM.upp)
+  return(output)
+}
+#-------------------------------------------------------------------------------
+
 
 # Function to estimate the I RxC local transition matrices using logit transformations
 
@@ -774,7 +867,7 @@ Thomsen_local_logit_2x2 <- function(votes1, total1, votes2, total2, confidence =
 
   # Whole space votes
   # Integration binormal
-  core <- pnorm2d(stats::qnorm(t1), stats::qnorm(t2), rho = r)
+  core <- pnorm2d_mvtnorm(stats::qnorm(t1), stats::qnorm(t2), rho = r)
   if (Yule.aprox){
     # Tetrachoric formula
     k <- sqrt((1L + 2L*r*t1 + 2L*r*t2 - r)^2L - 8L*r*(1L + r)*t1*t2)
@@ -794,7 +887,7 @@ Thomsen_local_logit_2x2 <- function(votes1, total1, votes2, total2, confidence =
     t1 <- votes1[ii]/total1[ii]
     t2 <- votes2[ii]/total2[ii]
     # Integration binormal
-    core <- pnorm2d(stats::qnorm(t1), stats::qnorm(t2), rho = r)
+    core <- pnorm2d_mvtnorm(stats::qnorm(t1), stats::qnorm(t2), rho = r)
     if (Yule.aprox){
       # Tetrachoric formula
       k <- sqrt((1L + 2L*r*t1 + 2L*r*t2 - r)^2L - 8L*r*(1L + r)*t1*t2)
@@ -817,8 +910,8 @@ Thomsen_local_logit_2x2 <- function(votes1, total1, votes2, total2, confidence =
     r_low <- tanh(log((1L + r)/(1L - r))/2L - z/sqrt(I - 3L))
 
     # Integration binormal
-    p2p_hi <- as.numeric(pnorm2d(stats::qnorm(t1), stats::qnorm(t2), rho = r_hi))/t1
-    p2p_low <- as.numeric(pnorm2d(stats::qnorm(t1), stats::qnorm(t2), rho = r_low))/t1
+    p2p_hi <- as.numeric(pnorm2d_mvtnorm(stats::qnorm(t1), stats::qnorm(t2), rho = r_hi))/t1
+    p2p_low <- as.numeric(pnorm2d_mvtnorm(stats::qnorm(t1), stats::qnorm(t2), rho = r_low))/t1
     if (Yule.aprox){
       # Tetrachoric formula
       k <- sqrt((1L + 2L*r_hi*t1 + 2L*r_hi*t2 - r_hi)^2L - 8L*r_hi*(1L + r_hi)*t1*t2)
@@ -838,8 +931,8 @@ Thomsen_local_logit_2x2 <- function(votes1, total1, votes2, total2, confidence =
       t2 <- votes2[ii]/total2[ii]
 
       # Integration binormal
-      p2p_hi <- as.numeric(pnorm2d(stats::qnorm(t1), stats::qnorm(t2), rho = r_hi))/t1
-      p2p_low <- as.numeric(pnorm2d(stats::qnorm(t1), stats::qnorm(t2), rho = r_low))/t1
+      p2p_hi <- as.numeric(pnorm2d_mvtnorm(stats::qnorm(t1), stats::qnorm(t2), rho = r_hi))/t1
+      p2p_low <- as.numeric(pnorm2d_mvtnorm(stats::qnorm(t1), stats::qnorm(t2), rho = r_low))/t1
       if (Yule.aprox){
         # Tetrachoric formula
         k <- sqrt((1L + 2L*r_hi*t1 + 2L*r_hi*t2 - r_hi)^2L - 8L*r_hi*(1L + r_hi)*t1*t2)
@@ -930,7 +1023,7 @@ Thomsen_local_probit_2x2 <- function(votes1, total1, votes2, total2, confidence 
 
   # Whole space
   # Integration binormal
-  core <- pnorm2d(stats::qnorm(t1), stats::qnorm(t2), rho = r)
+  core <- pnorm2d_mvtnorm(stats::qnorm(t1), stats::qnorm(t2), rho = r)
   if (Yule.aprox){
     # Tetrachoric formula
     k <- sqrt((1L + 2L*r*t1 + 2L*r*t2 - r)^2L - 8L*r*(1L + r)*t1*t2)
@@ -949,7 +1042,7 @@ Thomsen_local_probit_2x2 <- function(votes1, total1, votes2, total2, confidence 
   for (ii in 1L:I){
     t1 <- votes1[ii]/total1[ii]
     t2 <- votes2[ii]/total2[ii]
-    core <- pnorm2d(stats::qnorm(t1), stats::qnorm(t2), rho = r)
+    core <- pnorm2d_mvtnorm(stats::qnorm(t1), stats::qnorm(t2), rho = r)
     if (Yule.aprox){
       # Tetrachoric formula
       k <- sqrt((1L + 2L*r*t1 + 2L*r*t2 - r)^2L - 8L*r*(1L + r)*t1*t2)
@@ -970,8 +1063,8 @@ Thomsen_local_probit_2x2 <- function(votes1, total1, votes2, total2, confidence 
 
     # Whole space
     # Integration binormal
-    p2p_hi <- as.numeric(pnorm2d(stats::qnorm(t1), stats::qnorm(t2), rho = r_hi))/t1
-    p2p_low <- as.numeric(pnorm2d(stats::qnorm(t1), stats::qnorm(t2), rho = r_low))/t1
+    p2p_hi <- as.numeric(pnorm2d_mvtnorm(stats::qnorm(t1), stats::qnorm(t2), rho = r_hi))/t1
+    p2p_low <- as.numeric(pnorm2d_mvtnorm(stats::qnorm(t1), stats::qnorm(t2), rho = r_low))/t1
     if (Yule.aprox){
       # Tetrachoric formula
       k <- sqrt((1L + 2L*r_hi*t1 + 2L*r_hi*t2 - r_hi)^2L - 8L*r_hi*(1L + r_hi)*t1*t2)
@@ -991,8 +1084,8 @@ Thomsen_local_probit_2x2 <- function(votes1, total1, votes2, total2, confidence 
       t1 <- votes1[ii]/total1[ii]
       t2 <- votes2[ii]/total2[ii]
       # Integration binormal
-      p2p_hi <- as.numeric(pnorm2d(stats::qnorm(t1), stats::qnorm(t2), rho = r_hi))/t1
-      p2p_low <- as.numeric(pnorm2d(stats::qnorm(t1), stats::qnorm(t2), rho = r_low))/t1
+      p2p_hi <- as.numeric(pnorm2d_mvtnorm(stats::qnorm(t1), stats::qnorm(t2), rho = r_hi))/t1
+      p2p_low <- as.numeric(pnorm2d_mvtnorm(stats::qnorm(t1), stats::qnorm(t2), rho = r_low))/t1
       if (Yule.aprox){
         # Tetrachoric formula
         k <- sqrt((1L + 2L*r_hi*t1 + 2L*r_hi*t2 - r_hi)^2L - 8L*r_hi*(1L + r_hi)*t1*t2)
@@ -1030,7 +1123,19 @@ Thomsen_local_probit_2x2 <- function(votes1, total1, votes2, total2, confidence 
 # party as references using the approach proposed by Thomsen (1987) through equations (4.17)-(4.22)
 # but without approximation, allowing both transformations: logit and probit.
 
-reweighting_pjk <- function(pjk.array, ref1, ref2, scale, x, y, tol = 10^-6){
+reweighting_pjk <- function(pjk.array, ref1, ref2, scale, x, y, tol = 1e-6) {
+  ret <- reweighting_pjk_cpp(
+    as.numeric(pjk.array),   # aplanado
+    dim(pjk.array),          # dimensiones
+    ref1, ref2, scale, x, y, tol
+  )
+  list(
+    "vjk.array" = array(ret$vjk.array, dim = dim(pjk.array)),
+    "iter"      = ret$iter
+  )
+}
+
+reweighting_pjk_enR <- function(pjk.array, ref1, ref2, scale, x, y, tol = 10^-6){
   I <- dim(pjk.array)[3L]
   J <- dim(pjk.array)[1L]
   K <- dim(pjk.array)[2L]
@@ -1069,7 +1174,7 @@ reweighting_pjk <- function(pjk.array, ref1, ref2, scale, x, y, tol = 10^-6){
           # Pearson correlation of logit transformations
           cor.e <- sum(weight[valid] * (logit.rows - mean1) * (logit.cols - mean2))/sqrt(var1*var2)
           no.0 <- valid & pjk.array[jj, kk, ] != 0L
-          pjk.array[jj, kk, no.0] <- pnorm2d(stats::qnorm(suma.rows[1L, no.0]),
+          pjk.array[jj, kk, no.0] <- pnorm2d_mvtnorm(stats::qnorm(suma.rows[1L, no.0]),
                                              stats::qnorm(suma.cols[1L, no.0]), rho = cor.e)
         }
       }
@@ -1096,7 +1201,7 @@ reweighting_pjk <- function(pjk.array, ref1, ref2, scale, x, y, tol = 10^-6){
           # Pearson correlation of probit transformations
           cor.e <- sum(weight[valid] * (probit.rows - mean1) * (probit.cols - mean2))/sqrt(var1*var2)
           no.0 <- valid & pjk.array[jj, kk, ] != 0L
-          pjk.array[jj, kk, no.0] <- pnorm2d(stats::qnorm(suma.rows[1L, no.0]),
+          pjk.array[jj, kk, no.0] <- pnorm2d_mvtnorm(stats::qnorm(suma.rows[1L, no.0]),
                                              stats::qnorm(suma.cols[1L, no.0]), rho = cor.e)
         }
       }
@@ -1140,7 +1245,20 @@ reweighting_pjk <- function(pjk.array, ref1, ref2, scale, x, y, tol = 10^-6){
 # party as references using the approach proposed by Thomsen (1987) through equations (4.17)-(4.22)
 # allowing both transformations: logit and probit.
 
-reweighting_pjk_Yule <- function(pjk.array, ref1, ref2, scale, x, y, tol = 10^-6){
+reweighting_pjk_Yule <- function(pjk.array, ref1, ref2, scale, x, y, tol = 1e-6) {
+  ret <- reweighting_pjk_Yule_cpp(
+    as.numeric(pjk.array),   # aplanado
+    dim(pjk.array),          # dimensiones
+    ref1, ref2, scale, x, y, tol
+  )
+  list(
+    "vjk.array" = array(ret$vjk.array, dim = dim(pjk.array)),
+    "iter"      = ret$iter
+  )
+}
+
+
+reweighting_pjk_Yule_enR <- function(pjk.array, ref1, ref2, scale, x, y, tol = 10^-6){
   I <- dim(pjk.array)[3L]
   J <- dim(pjk.array)[1L]
   K <- dim(pjk.array)[2L]
@@ -1342,9 +1460,228 @@ average_local_weights <- function(vjk.units.multi, pjk.crude.local, x0, y0){
 }
 
 #-------------------------------------------------------------------------------
+# Function to calculate unit estimates with appropriate weights.
+units_by_weights <- function(vjk.units.multi, VTM.crude, pjk.crude.local,
+                             x0, y0, x, y, tol, correlations){
+  J0 <- ncol(x0)
+  K0 <- ncol(y0)
+  vjk_r1_r2 <- solutions_by_reference(vjk.units.multi, x0, y0)
+  
+  ## Global weights
+  J <- nrow(VTM.crude)
+  K <- ncol(VTM.crude)
+  I <- nrow(x0)
+  
+  vjk.units.averages <- array(NA, dim = c(J, K, I, 8L))
+  names1 <- rownames(VTM.crude)
+  names2 <- colnames(VTM.crude)
+  names3 <- rownames(x0)
+  dimnames(vjk.units.averages) <- c(list(names1), list(names2), list(names3),
+                                   list(c("Mean", "RCNV", "SQRCNV", "SQRM", "AVCR", "LRCNV", "LSQRCNV", "LSQRM")))
+  
+  # Reference Cell Number of Voters: Mean
+    vjk.units <- apply(vjk.units.multi, c(1L, 2L, 3L), mean)
+    for (ii in 1L:I){
+      vjk.units[, , ii] <- IPF(vjk.units[, , ii], y[ii, ], x[ii, ], precision = tol)
+    }
+    vjk.units.averages[, , , 1L] <- vjk.units
+  
+  # Reference Cell Number of Voters: RCNV
+    weights <- as.vector(t(VTM.crude[1L:J0, 1L:K0] * colSums(x0)))
+    weights <- weights/sum(weights)
+    W <- array(rep(weights, each = I*J*K), dim(vjk.units.multi))
+    vjk.units <- apply(vjk.units.multi * W, c(1L, 2L, 3L), sum)
+    for (ii in 1L:I){
+      vjk.units[, , ii] <- IPF(vjk.units[, , ii], y[ii, ], x[ii, ], precision = tol)
+    }
+    vjk.units.averages[, , , 2L] <- vjk.units
+  
+  # Square Root Reference Cell Number of Voters: SQRCNV
+    weights <- as.vector(t(sqrt(VTM.crude[1L:J0, 1L:K0] * colSums(x0))))
+    weights <- weights/sum(weights)
+    W <- array(rep(weights, each = I*J*K), dim(vjk.units.multi))
+    vjk.units <- apply(vjk.units.multi * W, c(1L, 2L, 3L), sum)
+    for (ii in 1L:I){
+      vjk.units[, , ii] <- IPF(vjk.units[, , ii], y[ii, ], x[ii, ], precision = tol)
+    }
+    vjk.units.averages[, , , 3L] <- vjk.units
+  
+  # Square Root Reference Margins: SQRM
+    weights <- NULL
+    for (jj in 1L:J0){
+      for (kk in 1L:K0)
+        weights <- c(weights, sqrt(colSums(x0)[jj] * colSums(y0)[kk]))
+    }
+    weights <- weights/sum(weights)
+    W <- array(rep(weights, each = I*J*K), dim(vjk.units.multi))
+    vjk.units <- apply(vjk.units.multi * W, c(1L, 2L, 3L), sum)
+    for (ii in 1L:I){
+      vjk.units[, , ii] <- IPF(vjk.units[, , ii], y[ii, ], x[ii, ], precision = tol)
+    }
+    vjk.units.averages[, , , 4L] <- vjk.units
+  
+  # Correlation Reference: AVCR
+    weights <- abs(as.vector(t(correlations[1L:J0, 1L:K0])))
+    weights <- weights/sum(weights)
+    W <- array(rep(weights, each = I*J*K), dim(vjk.units.multi))
+    vjk.units <- apply(vjk.units.multi * W, c(1L, 2L, 3L), sum)
+    for (ii in 1L:I){
+      vjk.units[, , ii] <- IPF(vjk.units[, , ii], y[ii, ], x[ii, ], precision = tol)
+    }
+    vjk.units.averages[, , , 5L] <- vjk.units
+  
+  ## Local weights
+  
+  J <- dim(pjk.crude.local)[1L]
+  K <- dim(pjk.crude.local)[2L]
+  
+  # Local Reference Cell Number of Voters: LRCNV
+    vjk.crude.local <- pjk.crude.local[1L:J0, 1L:K0, ] * array(rep(rowSums(x0), each = J0*K0),
+                                                               dim(pjk.crude.local[1L:J0, 1L:K0, ]))
+    weights <- array(rep(as.vector(aperm(vjk.crude.local, c(3, 2, 1))), each = J*K), dim(vjk.units.multi))
+    LRCNV <- apply(vjk.units.multi * weights, c(1L, 2L, 3L), sum)
+    weights <- array(rep(as.vector(t(apply(vjk.crude.local, 3L, sum))), each =J*K), dim(LRCNV))
+    vjk.units <- LRCNV / weights
+    for (ii in 1L:I){
+      vjk.units[, , ii] <- IPF(vjk.units[, , ii], y[ii, ], x[ii, ], precision = tol)
+    }
+    vjk.units.averages[, , , 6L] <- vjk.units
+  
+  # Local Reference Cell Number of Voters: LSQRCNV
+    vjk.crude.local <- pjk.crude.local[1L:J0, 1L:K0, ] * array(rep(rowSums(x0), each = J0*K0),
+                                                               dim(pjk.crude.local[1L:J0, 1L:K0, ]))
+    weights <- array(sqrt(rep(as.vector(aperm(vjk.crude.local, c(3, 2, 1))), each = J*K)),
+                     dim(vjk.units.multi))
+    LSQRCNV <- apply(vjk.units.multi * weights, c(1L, 2L, 3L), sum)
+    weights <- apply(weights, c(1L, 2L, 3L), sum)
+    vjk.units <- LSQRCNV / weights
+    for (ii in 1L:I){
+      vjk.units[, , ii] <- IPF(vjk.units[, , ii], y[ii, ], x[ii, ], precision = tol)
+    }
+    vjk.units.averages[, , , 7L] <- vjk.units
+  
+  # Local Square Root Reference Margins: LSQRM
+    weights <- NULL
+    for (jj in 1L:J0){
+      for (kk in 1L:K0)
+        weights <- c(weights, rep(sqrt(x0[, jj] * y0[, kk]), each = J*K))
+    }
+    weights <- array(weights, dim(vjk.units.multi))
+    LSQRM <- apply(vjk.units.multi * weights, c(1L, 2L, 3L), sum)
+    weights <- apply(weights, c(1L, 2L, 3L), sum)
+    vjk.units <- LSQRM / weights
+    for (ii in 1L:I){
+      vjk.units[, , ii] <- IPF(vjk.units[, , ii], y[ii, ], x[ii, ], precision = tol)
+    }
+    vjk.units.averages[, , , 8L] <- vjk.units
+  
+  return(vjk.units.averages)
+}
+
+#-------------------------------------------------------------------------------
+# Function to calculate unit estimates with appropriate weights for errors estimates.
+units_by_weights_errors <- function(ref.combination, vjk.units.multi, VTM.crude, 
+                                    pjk.crude.local, x0, y0, correlations){
+  J0 <- ncol(x0)
+  K0 <- ncol(y0)
+  vjk_r1_r2 <- solutions_by_reference(vjk.units.multi, x0, y0)
+  
+  ## Global weights
+  J <- nrow(VTM.crude)
+  K <- ncol(VTM.crude)
+  I <- nrow(x0)
+  
+  # Reference Cell Number of Voters: RCNV
+  if (ref.combination == "RCNV") {
+    weights <- as.vector(t(VTM.crude[1L:J0, 1L:K0] * colSums(x0)))
+    weights <- weights/sum(weights)
+    W <- array(rep(weights, each = I*J*K), dim(vjk.units.multi))
+    vjk.units <- apply(vjk.units.multi * W, c(1L, 2L, 3L), sum)
+  }
+  
+  # Square Root Reference Cell Number of Voters: SQRCNV
+  if (ref.combination == "SQRCNV") {
+    weights <- as.vector(t(sqrt(VTM.crude[1L:J0, 1L:K0] * colSums(x0))))
+    weights <- weights/sum(weights)
+    W <- array(rep(weights, each = I*J*K), dim(vjk.units.multi))
+    vjk.units <- apply(vjk.units.multi * W, c(1L, 2L, 3L), sum)
+  }
+  
+  # Square Root Reference Margins: SQRM
+  if (ref.combination == "SQRM") {
+    weights <- NULL
+    for (jj in 1L:J0){
+      for (kk in 1L:K0)
+        weights <- c(weights, sqrt(colSums(x0)[jj] * colSums(y0)[kk]))
+    }
+    weights <- weights/sum(weights)
+    W <- array(rep(weights, each = I*J*K), dim(vjk.units.multi))
+    vjk.units <- apply(vjk.units.multi * W, c(1L, 2L, 3L), sum)
+  }
+  
+  # Correlation Reference: AVCR
+  if (ref.combination == "AVCR") {
+    weights <- abs(as.vector(t(correlations[1L:J0, 1L:K0])))
+    weights <- weights/sum(weights)
+    W <- array(rep(weights, each = I*J*K), dim(vjk.units.multi))
+    vjk.units <- apply(vjk.units.multi * W, c(1L, 2L, 3L), sum)
+  }
+  
+  # Reference Cell Number of Voters: Mean
+  if (ref.combination == "Mean") {
+    names1 <- rownames(VTM.crude)
+    names2 <- colnames(VTM.crude)
+    names3 <- rownames(x0)
+    vjk.units <- apply(vjk.units.multi, c(1L, 2L, 3L), mean)
+    dimnames(vjk.units) <- c(list(names1), list(names2), list(names3))
+  }
+  
+  ## Local weights
+  
+  J <- dim(pjk.crude.local)[1L]
+  K <- dim(pjk.crude.local)[2L]
+  
+  # Local Reference Cell Number of Voters: LRCNV
+  if (ref.combination == "LRCNV") {
+    vjk.crude.local <- pjk.crude.local[1L:J0, 1L:K0, ] * array(rep(rowSums(x0), each = J0*K0),
+                                                               dim(pjk.crude.local[1L:J0, 1L:K0, ]))
+    weights <- array(rep(as.vector(aperm(vjk.crude.local, c(3, 2, 1))), each = J*K), dim(vjk.units.multi))
+    LRCNV <- apply(vjk.units.multi * weights, c(1L, 2L, 3L), sum)
+    weights <- array(rep(as.vector(t(apply(vjk.crude.local, 3L, sum))), each =J*K), dim(LRCNV))
+    vjk.units <- LRCNV / weights
+  }
+  
+  # Local Reference Cell Number of Voters: LSQRCNV
+  if (ref.combination == "LSQRCNV") {
+    vjk.crude.local <- pjk.crude.local[1L:J0, 1L:K0, ] * array(rep(rowSums(x0), each = J0*K0),
+                                                               dim(pjk.crude.local[1L:J0, 1L:K0, ]))
+    weights <- array(sqrt(rep(as.vector(aperm(vjk.crude.local, c(3, 2, 1))), each = J*K)),
+                     dim(vjk.units.multi))
+    LSQRCNV <- apply(vjk.units.multi * weights, c(1L, 2L, 3L), sum)
+    weights <- apply(weights, c(1L, 2L, 3L), sum)
+    vjk.units <- LSQRCNV / weights
+  }
+  
+  # Local Square Root Reference Margins: LSQRM
+  if (ref.combination == "LSQRM") {
+    weights <- NULL
+    for (jj in 1L:J0){
+      for (kk in 1L:K0)
+        weights <- c(weights, rep(sqrt(x0[, jj] * y0[, kk]), each = J*K))
+    }
+    weights <- array(weights, dim(vjk.units.multi))
+    LSQRM <- apply(vjk.units.multi * weights, c(1L, 2L, 3L), sum)
+    weights <- apply(weights, c(1L, 2L, 3L), sum)
+    vjk.units <- LSQRM / weights
+  }
+  
+  return(vjk.units)
+}
+
+#-------------------------------------------------------------------------------
 # Function to generate the reference.outputs.
-reference_outputs <- function(vjk.units.multi, VTM.crude, pjk.crude.local, x0, y0,
-                              correlations){
+reference_outputs <- function(vjk.units.multi, vjk.units.averages, VTM.crude, 
+                              pjk.crude.local, x0, y0, correlations){
   # vjk.by.reference
   names1 <- rownames(VTM.crude)
   names2 <- colnames(VTM.crude)
@@ -1360,23 +1697,19 @@ reference_outputs <- function(vjk.units.multi, VTM.crude, pjk.crude.local, x0, y
 
   # vjk.averages
   vjk.averages <- array(NA, c(dim(VTM.crude), 8L))
-  vjk.averages[, , 1L] <- apply(apply(vjk.units.multi, c(1L, 2L, 3L), mean), c(1L, 2L), sum)
-  averages <- average_global_weights(vjk.units.multi = vjk.units.multi, VTM.crude = VTM.crude, x0 = x0,
-                                     y0 = y0, correlations = correlations)
-  vjk.averages[, , 2L] <- averages$RCNV
-  vjk.averages[, , 3L] <- averages$SQRCNV
-  vjk.averages[, , 4L] <- averages$SQRM
-  vjk.averages[, , 5L] <- averages$AVCR
-  averages <- average_local_weights(vjk.units.multi = vjk.units.multi, pjk.crude.local = pjk.crude.local,
-                                    x0 = x0, y0 = y0)
-  vjk.averages[, , 6L] <- averages$LRCNV
-  vjk.averages[, , 7L] <- averages$LSQRCNV
-  vjk.averages[, , 8L] <- averages$LSQRM
+  vjk.averages[, , 1L] <- apply(vjk.units.averages[, , , 1L], c(1L, 2L), sum)
+  vjk.averages[, , 2L] <- apply(vjk.units.averages[, , , 2L], c(1L, 2L), sum)
+  vjk.averages[, , 3L] <- apply(vjk.units.averages[, , , 3L], c(1L, 2L), sum)
+  vjk.averages[, , 4L] <- apply(vjk.units.averages[, , , 4L], c(1L, 2L), sum)
+  vjk.averages[, , 5L] <- apply(vjk.units.averages[, , , 5L], c(1L, 2L), sum)
+  vjk.averages[, , 6L] <- apply(vjk.units.averages[, , , 6L], c(1L, 2L), sum)
+  vjk.averages[, , 7L] <- apply(vjk.units.averages[, , , 7L], c(1L, 2L), sum)
+  vjk.averages[, , 8L] <- apply(vjk.units.averages[, , , 8L], c(1L, 2L), sum)
   names3 <- c("Mean", "RCNV", "SQRCNV", "SQRM", "AVCR", "LRCNV", "LSQRCNV", "LSQRM")
   dimnames(vjk.averages) <- c(list(names1), list(names2), list(names3))
 
-  return(list("vjk.averages" = vjk.averages, "vjk.by.reference" = vjk.by.reference,
-              "vjk.units.by.reference" = vjk.units.multi))
+  return(list("vjk.averages" = vjk.averages, "vjk.units.averages" = vjk.units.averages,
+              "vjk.by.reference" = vjk.by.reference, "vjk.units.by.reference" = vjk.units.multi))
 }
 
 #-------------------------------------------------------------------------------
@@ -1384,7 +1717,7 @@ Thomsen_iter_algorithm <- function(pjk.crude.local, Yule.aprox, reference,
                                    scale, x, y, J0, K0, tol){
 #  J <- dim(pjk.crude.local)[1]
 #  K <- dim(pjk.crude.local)[2]
-#  I <- dim(pjk.crude.local)[3]
+  I <- dim(pjk.crude.local)[3]
 
   if (Yule.aprox){
     reweighting <- reweighting_pjk_Yule
@@ -1416,22 +1749,30 @@ Thomsen_iter_algorithm <- function(pjk.crude.local, Yule.aprox, reference,
 
 #-------------------------------------------------------------------------------
 # Function for extracting samples of (global and local) vjk matrices after applying the Thomsen algorithm
-# and combining reference solutions using correlations
+# and combining reference solutions the appropriate appproach
 extract_muestra_vjk <- function(pjk.low, pjk.upp, Yule.aprox, reference, scale, x, y, J0, K0, tol,
-                                correlations = correlations){
+                                correlations = correlations, ref.combination, VTM.crude){
   JKI <- prod(dim(pjk.low))
   pjk.crude <- array(stats::runif(JKI, min = as.vector(pjk.low), max = as.vector(pjk.upp)),
                      dim = dim(pjk.low))
+  x0 <- x[, 1L:J0]
+  y0 <- y[, 1L:K0]
 
   if(is.null(reference)){
     muestra <- Thomsen_iter_algorithm(pjk.crude.local = pjk.crude,
                                       Yule.aprox = Yule.aprox, reference = reference,
                                       scale = scale, x = x, y = y,
                                       J0 = J0, K0 = K0, tol = tol)$vjk.units.multi
-    weights <- abs(as.vector(t(correlations[1L:J0, 1L:K0])))
-    weights <- weights/sum(weights)
-    W <- array(rep(weights, each = JKI), dim(muestra))
-    muestra <- apply(muestra * W, c(1L, 2L, 3L), sum)
+    #weights <- abs(as.vector(t(correlations[1L:J0, 1L:K0])))
+    #weights <- weights/sum(weights)
+    #W <- array(rep(weights, each = JKI), dim(muestra))
+    #muestra <- apply(muestra * W, c(1L, 2L, 3L), sum)
+    muestra <- units_by_weights_errors(ref.combination = ref.combination, 
+                                       vjk.units.multi = muestra, 
+                                       VTM.crude = VTM.crude, 
+                                       pjk.crude.local = pjk.crude,
+                                       x0 = x0, y0 = y0, 
+                                       correlations = correlations)
   } else {
     muestra <- Thomsen_iter_algorithm(pjk.crude.local = pjk.crude,
                                       Yule.aprox = Yule.aprox, reference = reference,
@@ -1446,7 +1787,7 @@ extract_muestra_vjk <- function(pjk.low, pjk.upp, Yule.aprox, reference, scale, 
 # we adopt a conservative approach
 
 intervals_Thomsen <- function(muestra_vjk_local, vjk.units, x, confidence){
-# local
+  # local
   J <- dim(vjk.units)[1]
   K <- dim(vjk.units)[2]
   total.rows <- array(as.vector(kronecker(rep(1L, K), t(x))), dim(vjk.units))
@@ -1463,8 +1804,8 @@ intervals_Thomsen <- function(muestra_vjk_local, vjk.units, x, confidence){
   VTM.u.local <- VTM.u.local/total.rows
   VTM.l.local[is.nan(VTM.l.local)] <- 0L
   VTM.u.local[is.nan(VTM.u.local)] <- 0L
-
-# global
+  
+  # global
   total.rows <- matrix(rep(colSums(x), K), J)
   muestra_vjk_global <- apply(muestra_vjk_local, c(1L, 2L, 4L), sum)
   VTM.lower <- apply(muestra_vjk_global, c(1L, 2L),
@@ -1479,8 +1820,264 @@ intervals_Thomsen <- function(muestra_vjk_local, vjk.units, x, confidence){
   VTM.upper <- pmin(pmax(VTM.votes + sup, VTM.votes), total.rows)
   VTM.lower <- VTM.lower/rowSums(VTM.votes)
   VTM.upper <- VTM.upper/rowSums(VTM.votes)
-
+  
   return(list("VTM.l.local" = VTM.l.local, "VTM.u.local" = VTM.u.local,
               "VTM.lower" = VTM.lower, "VTM.upper" = VTM.upper))
 }
 
+#-------------------------------------------------------------------------------
+# Function for extracting purposive samples of (global and local) vjk matrices of min values 
+# following the conservative approach proposed in Pavía-Miralles (2005) after 
+# applying the Thomsen algorithm and combining reference solutions using correlations
+extract_selec_vjk_min <- function(pjk.low, pjk.upp, Yule.aprox, reference, scale, x, y, J0, K0, tol,
+                                    correlations = correlations, bb = bb, ref.combination, VTM.crude){
+
+  JKI <- prod(dim(pjk.low))
+  K <- ncol(pjk.low)
+  col <- bb %% K
+  row <- bb %/% K + 1L
+  if (col == 0L){
+    col <- K
+    row <- row - 1L
+  }
+  pjk.crude <- pjk.upp
+  pjk.crude[row, col, ] <- pjk.low[row, col, ]
+  x0 <- x[, 1L:J0]
+  y0 <- y[, 1L:K0]
+  
+  if(is.null(reference)){
+    muestra <- Thomsen_iter_algorithm(pjk.crude.local = pjk.crude,
+                                      Yule.aprox = Yule.aprox, reference = reference,
+                                      scale = scale, x = x, y = y,
+                                      J0 = J0, K0 = K0, tol = tol)$vjk.units.multi
+    #weights <- abs(as.vector(t(correlations[1L:J0, 1L:K0])))
+    #weights <- weights/sum(weights)
+    #W <- array(rep(weights, each = JKI), dim(muestra))
+    #muestra <- apply(muestra * W, c(1L, 2L, 3L), sum)
+    muestra <- units_by_weights_errors(ref.combination = ref.combination, 
+                                       vjk.units.multi = muestra, 
+                                       VTM.crude = VTM.crude, 
+                                       pjk.crude.local = pjk.crude,
+                                       x0 = x0, y0 = y0, 
+                                       correlations = correlations)
+  } else {
+    muestra <- Thomsen_iter_algorithm(pjk.crude.local = pjk.crude,
+                                      Yule.aprox = Yule.aprox, reference = reference,
+                                      scale = scale, x = x, y = y,
+                                      J0 = J0, K0 = K0, tol = tol)$vjk.units
+  }
+  return("muestra" = muestra)
+}
+#-------------------------------------------------------------------------------
+# Function for extracting purposive samples of (global and local) vjk matrices of max values 
+# following the conservative approach proposed in Pavía-Miralles (2005) after 
+# applying the Thomsen algorithm and combining reference solutions using correlations
+extract_selec_vjk_max <- function(pjk.low, pjk.upp, Yule.aprox, reference, scale, x, y, J0, K0, tol,
+                                    correlations = correlations, bb = bb, ref.combination, VTM.crude){
+
+  JKI <- prod(dim(pjk.low))
+  K <- ncol(pjk.low)
+  col <- bb %% K
+  row <- bb %/% K + 1L
+  if (col == 0L){
+    col <- K
+    row <- row - 1L
+  }
+  pjk.crude <- pjk.low
+  pjk.crude[row, col, ] <- pjk.upp[row, col, ]
+  x0 <- x[, 1L:J0]
+  y0 <- y[, 1L:K0]
+
+  if(is.null(reference)){
+    muestra <- Thomsen_iter_algorithm(pjk.crude.local = pjk.crude,
+                                      Yule.aprox = Yule.aprox, reference = reference,
+                                      scale = scale, x = x, y = y,
+                                      J0 = J0, K0 = K0, tol = tol)$vjk.units.multi
+    #weights <- abs(as.vector(t(correlations[1L:J0, 1L:K0])))
+    #weights <- weights/sum(weights)
+    #W <- array(rep(weights, each = JKI), dim(muestra))
+    #muestra <- apply(muestra * W, c(1L, 2L, 3L), sum)
+    muestra <- units_by_weights_errors(ref.combination = ref.combination, 
+                                       vjk.units.multi = muestra, 
+                                       VTM.crude = VTM.crude, 
+                                       pjk.crude.local = pjk.crude,
+                                       x0 = x0, y0 = y0, 
+                                       correlations = correlations)
+  } else {
+    muestra <- Thomsen_iter_algorithm(pjk.crude.local = pjk.crude,
+                                      Yule.aprox = Yule.aprox, reference = reference,
+                                      scale = scale, x = x, y = y,
+                                      J0 = J0, K0 = K0, tol = tol)$vjk.units
+  }
+  return("muestra" = muestra)
+}
+
+#-------------------------------------------------------------------------------
+# Function for creating intervals using the Thomsen approach
+# after implementing the conservative approach proposed in Pavía-Miralles (2005)
+
+intervals_Thomsen_conservative <- function(selec_vjk_local_min, selec_vjk_local_max, 
+                                          vjk.units, x){
+  # local
+  J <- dim(vjk.units)[1]
+  K <- dim(vjk.units)[2]
+  VTM.l.local <- VTM.u.local <- vjk.units
+  total.rows <- array(as.vector(kronecker(rep(1L, K), t(x))), dim(vjk.units))
+  for (bb in 1L:(J*K)){
+    col <- bb %% K
+    row <- bb %/% K + 1L
+    if (col == 0L){
+      col <- K
+      row <- row - 1L
+    }
+    VTM.l.local[row, col, ] <- selec_vjk_local_min[row, col, , bb]
+    VTM.u.local[row, col, ] <- selec_vjk_local_max[row, col, , bb]
+  }
+
+  VTM.l.local <- pmin(pmin(VTM.l.local, VTM.u.local), vjk.units)
+  VTM.u.local <- pmax(pmax(VTM.l.local, VTM.u.local), vjk.units)
+  
+  # global
+  VTM.lower <- apply(VTM.l.local, c(1L, 2L), sum)
+  VTM.upper <- apply(VTM.u.local, c(1L, 2L), sum)
+
+  VTM.l.local <- VTM.l.local/total.rows
+  VTM.u.local <- VTM.u.local/total.rows
+  VTM.l.local[is.nan(VTM.l.local)] <- 0L
+  VTM.u.local[is.nan(VTM.u.local)] <- 0L
+  
+  VTM.lower <- VTM.lower/apply(vjk.units, 1, sum)
+  VTM.upper <- VTM.upper/apply(vjk.units, 1, sum)
+  
+  
+  return(list("VTM.l.local" = VTM.l.local, "VTM.u.local" = VTM.u.local,
+              "VTM.lower" = VTM.lower, "VTM.upper" = VTM.upper))
+}
+
+#-------------------------------------------------------------------------------
+# Calcula los bounds correspondientes a todas las coordenadas de la matriz global
+# y de las matrices locales
+bounds_compound <- function(origin, destination, scenario, J0, K0){
+  origin <- as.matrix(origin)
+  destination <- as.matrix(destination)
+  I <- nrow(origin)
+  J <- ncol(origin)
+  K <- ncol(destination)
+  lower <- upper <- matrix(0, J, K)
+  lower.u <- upper.u <- array(NA, dim = c(J, K, I))
+  for (i in 1L:I){
+    limits <- bounds(marg.row = origin[i, ], marg.col = destination[i, ])
+    lower <- lower + limits$lower*origin[i, ]
+    upper <- upper + limits$upper*origin[i, ]
+    lower.u[, , i] <- limits$lower
+    upper.u[, , i] <- limits$upper
+  }
+  lower <- lower*(colSums(origin)^-1L)
+  upper <- upper*(colSums(origin)^-1L)
+  
+  m.l <- constraints_scenario_bounds(lower, lower.u, scenario, J0, K0)
+  m.u <- constraints_scenario_bounds(upper, upper.u, scenario, J0, K0)
+  lower <- m.l$m.global 
+  lower.u <- m.l$m.units
+  upper <- m.u$m.global
+  upper.u <- m.u$m.units
+  
+  rownames(lower) <- rownames(upper) <- colnames(origin)
+  colnames(lower) <- colnames(upper) <- colnames(destination)
+  dimnames(lower.u) <- dimnames(upper.u) <- c(dimnames(lower),
+                                              list(rownames(origin)))
+  
+  return(list("lower" = lower, "upper" = upper, 
+              "lower.units" = lower.u, "upper.units" = upper.u))
+}
+
+# Function to incorporate the constraints into the bounds matrices
+constraints_scenario_bounds <- function(m.global, m.units, scenario, J0, K0){
+  J <- nrow(m.global)
+  K <- ncol(m.global)
+  if((scenario == "raw" & J > J0 & K > K0) |
+     (scenario == "regular" & J == J0 & K > K0) |
+     (scenario == "ordinary" & J > J0 & K == K0) |
+     (scenario == "enriched" & J == J0 & K == K0) |
+     (scenario == "semifull")) {
+    m.global[J, K] <- 0L
+    m.units[J, K, ] <- 0L
+  } else if ((scenario == "regular" & J > J0 & K > K0) |
+             (scenario == "enriched" & J > J0 & K == K0) |
+             (scenario == "full")) {
+    m.global[J, K] <- 0L
+    m.units[J, K, ] <- 0L
+    m.global[J - 1L, K] <- 0L
+    m.units[J - 1L, K, ] <- 0L
+  } else if ((scenario == "ordinary" & J > J0 & K > K0) |
+             (scenario == "enriched" & J == J0 & K > K0)) {
+    m.global[J, K] <- 0L
+    m.units[J, K, ] <- 0L
+    m.global[J, K - 1L] <- 0L
+    m.units[J, K - 1L, ] <- 0L
+  } else if ((scenario == "enriched" & J > J0 & K > K0) |
+             (scenario == "gold")) {
+    m.global[J, K] <- 0L
+    m.units[J, K, ] <- 0L
+    m.global[J, K - 1L] <- 0L
+    m.units[J, K - 1L, ] <- 0L
+    m.global[J - 1L, K] <- 0L
+    m.units[J - 1L, K, ] <- 0L
+    m.global[J - 1L, K - 1L] <- 0L
+    m.units[J - 1L, K - 1L, ] <- 0L
+  }
+  return(list("m.global" = m.global, "m.units" = m.units))
+}
+
+
+# Calcula los bounds correspondientes a la coordenada (1,1) de una tabla 2x2
+# filas: vector de orden dos con los marginales por fila
+# columnas: vector de orden dos con los marginales por fila
+bounds_uni <- function(filas, columnas){
+  Xi <- filas[1L]/sum(filas)
+  Ti <- columnas[1L]/sum(columnas)
+  Li <- max(0L, (Ti - (1L- Xi))/Xi)
+  Ui <- min(1L, Ti/Xi)
+  if (Xi == 0) Li <- Ui <- 0
+  return(list("lower" = Li, "upper" = Ui))
+}
+
+# Calcula los bounds correspondientes a todas las coordenadas de la matriz
+bounds <- function(marg.row, marg.col){
+  J <- length(marg.row)
+  K <- length(marg.col)
+  lower <- upper <- matrix(NA, J, K)
+  for (j in 1L:J){
+    for (k in 1L:K){
+      filas <- c(marg.row[j], sum(marg.row) - marg.row[j])
+      columnas <- c(marg.col[k], sum(marg.col) - marg.col[k])
+      limits <- bounds_uni(filas = filas, columnas = columnas)
+      lower[j, k] <- limits$lower
+      upper[j, k] <- limits$upper
+    }
+  }
+  rownames(lower) <- rownames(upper) <- names(marg.row)
+  colnames(lower) <- colnames(upper) <- names(marg.col)
+  return(list("lower" = lower, "upper" = upper))
+}
+
+# Añade una columna o una fila de ceros si es necesario
+expand_matrix <- function(mat, nrow.max, ncol.max, r.names, c.names) {
+  res <- matrix(0, nrow = nrow.max, ncol = ncol.max)
+  res[1:nrow(mat), 1:ncol(mat)] <- mat
+  dimnames(res) <- list(r.names, c.names)
+  return(res)
+}
+
+expand_array <- function(arr, max.rows, max.cols) {
+  d <- dim(arr)
+  if (length(d) == 3){
+    res <- array(0, dim = c(max.rows, max.cols, d[3L]))
+    res[1L:d[1L], 1L:d[2L], ] <- arr
+  }
+  if (length(d) == 4){
+    res <- array(0, dim = c(max.rows, max.cols, d[3L], d[4L]))
+    res[1L:d[1L], 1L:d[2L], , ] <- arr
+  }
+  return(res)
+}
